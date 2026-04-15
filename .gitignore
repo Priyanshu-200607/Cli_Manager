@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Logs
+*.log
+
+# Database
+*.db
+
+# Runtime / generated data
+data/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
