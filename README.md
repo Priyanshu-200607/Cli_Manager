@@ -1,78 +1,187 @@
 # CLI Manager
 
-Phase 0 implements the Gemini handoff skeleton for a terminal-based AI orchestration system.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-WAL%20Mode-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![Rich TUI](https://img.shields.io/badge/TUI-Rich%20Framework-FF6E3C?style=flat-square)](https://github.com/Textualize/rich)
+[![License](https://img.shields.io/badge/License-MIT-22C55E?style=flat-square)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Evolution%20Phase-8B5CF6?style=flat-square)]()
+
+> **A terminal-native AI orchestration system that autonomously plans, builds, critiques, and self-heals code — powered by multiple AI agents and driven entirely from your terminal.**
+
+---
+
+## Why CLI Manager?
+
+Most AI coding tools are wrappers. You paste a prompt, get code, and hope for the best.
+
+CLI Manager is different. It's not a script that calls an API — it's an **orchestration engine** that thinks in tasks, reasons about dependencies, routes work to the right agent, and fixes its own mistakes without you lifting a finger.
+
+| A Simple AI Script | CLI Manager |
+|---|---|
+| One agent, one prompt | Multi-agent pipeline with specialized roles |
+| Linear execution | Dependency-aware DAG task graphs |
+| You fix the bugs | Self-healing via autonomous Critique + Auto-Fix loop |
+| No memory between runs | SQLite-backed persistence with WAL mode |
+| You manage everything | Approval-gated autonomy with full observability |
+
+If a build task fails review, CLI Manager doesn't stop and ask you what to do. It spawns a recursive **Auto-Fix task**, routes it back through the execution agent, and keeps iterating until the critique passes — or until you intervene. That's the difference between a tool and a system.
+
+---
+
+## Features
+
+### 🖥️ Interactive Terminal UI (TUI)
+Built with Python's `rich` library — no browser, no Electron, no overhead.
+
+- **Kanban Board** — Live task cards across `Pending → In Progress → Done` columns
+- **DAG Visualizer** — Interactive directed acyclic graph showing task dependencies, traversable in-terminal
+- **Log Viewer** — Toggle real-time agent output inspection with `l`
+- **Approval Gating** — Manual confirmation before any task executes; you stay in control
+
+### 🧠 Autonomous Routing & Task DAGs
+- Submit a single high-level planning prompt
+- The **Planning Agent** (Gemini) decomposes it into a structured DAG of sub-tasks
+- Each sub-task is automatically routed: planning tasks → Planning Agent, build/fix tasks → Execution Agent (Codex/Gemini)
+- Dependencies are respected; nothing runs out of order
+
+### 🔁 Critique & Self-Healing Loop
+- Every completed build task is automatically reviewed by a **Critique Agent** (Gemini)
+- If it fails review, an **Auto-Fix task** is recursively spawned and executed
+- The loop continues until the critique passes — no human intervention required
+- Full audit trail in the log viewer
+
+### 💾 Robust Persistence
+- SQLite database (`data/persistence/orchestrator.db`) with WAL mode enabled for concurrent reads during active execution
+- Stores: task metadata, DAG structure, file locks, agent assignments, and simulated fuel/token tracking
+- Survives restarts — background PIDs are tracked and reconciled on boot
+
+### 👁️ Process Recovery & Workspace Watching
+- Orchestrator tracks subprocess PIDs across sessions
+- Watches the `src/` directory for filesystem changes
+- Automatically triggers validation tasks when source files are modified
+
+---
 
 ## Architecture
 
-The system follows a layered approach to isolate visual representation from process orchestration and data persistence.
+```
+cli-manager/
+├── src/
+│   ├── tui/                        # Visual layer
+│   │   ├── main_view.py            # Entry point; orchestrates all panels
+│   │   ├── dag_graph.py            # Interactive DAG visualizer
+│   │   ├── kanban.py               # Task board (Pending / In Progress / Done)
+│   │   ├── log_viewer.py           # Toggleable agent output inspector
+│   │   └── approval_modal.py       # Gating UI before task execution
+│   │
+│   └── core/                       # Orchestration & data layer
+│       ├── task_engine.py          # Task lifecycle: create → route → execute → critique
+│       ├── routing_service.py      # Decides: which agent handles which task type
+│       ├── runtime_pool.py         # Subprocess lifecycle manager for agent commands
+│       ├── event_bus.py            # Pub/Sub transport: background runtime ↔ TUI
+│       └── persistence/
+│           └── db_manager.py       # SQLite state, file locks, DAG tracking
+│
+└── data/
+    └── persistence/
+        ├── orchestrator.db         # Primary state database (WAL mode)
+        └── artifacts/              # Agent outputs: blueprints, builds, critiques
+```
 
-- `view_terminal`: TUI layout, active session rendering, input loop.
-- `runtime_pool`: subprocess lifecycle management for agent commands.
-- `event_bus`: internal publish/subscribe transport between runtime and TUI.
-- `context_store_location`: `./data/context/global_state.json`
+### Agent Roles
 
-## Phase 0 Scope
+| Agent | Model | Role |
+|---|---|---|
+| Planning Agent | Gemini | Decomposes high-level goals into task DAGs |
+| Execution Agent | Codex / Gemini | Implements build and fix tasks |
+| Critique Agent | Gemini | Reviews completed builds; triggers Auto-Fix on failure |
 
-- Spawn `gemini --version` and capture its output.
-- Broadcast subprocess messages from the runtime to the TUI.
-- Render an "Active Sessions" view that updates in real time.
+### Data Flow
 
-## Not In Scope
+```
+User Input (n)
+     │
+     ▼
+Planning Agent ──► Generates DAG of sub-tasks
+     │
+     ▼
+Routing Service ──► Assigns each task to the right agent
+     │
+     ▼
+Runtime Pool ──► Spawns subprocesses; streams output via Event Bus
+     │
+     ▼
+TUI ──► Live updates on Kanban + Log Viewer
+     │
+     ▼
+Critique Agent ──► Reviews build output
+     │
+  pass? ──► Done ✓
+  fail? ──► Auto-Fix task spawned ──► loops back to Routing Service
+```
 
-- Task routing logic.
-- Multi-file context merging.
+---
 
+## Getting Started
 
-Based on the "Ruthless Reality" comparison with agtx and the current state of cli_manager, here are the potential updates required to transform your prototype
-  into a high-performance, professional-grade system.
+### Prerequisites
 
-  1. Infrastructure Overhaul (The "agtx" Standards)
-   * Git Worktree Isolation: 
-       * Current: Agents share the same folder and wait for file_locks.
-       * Update: Automatically create a git worktree in .agtx/worktrees/<task_id> for every task.
-       * Benefit: Real parallel execution. Agent A can't accidentally delete Agent B's files.
-   * Tmux / PTY Integration:
-       * Current: Read-only log viewer in the TUI.
-       * Update: Run agents inside a tmux window or a Pseudo-terminal (PTY).
-       * Benefit: "Human-in-the-Loop." You can press a key to "Join" the agent's session and type commands yourself if it gets stuck.
+- Python 3.10+
+- Gemini API key (set as `GEMINI_API_KEY` in your environment)
+- Codex CLI configured (optional, for execution agent)
 
-  2. Intelligence & Autonomy (Expanding your "Lead")
-   * Multi-Agent Debate Service:
-       * Current: One Gemini agent plans; one Gemini agent critiques.
-       * Update: Spawn two planning agents. Let them "debate" the architecture, and have a third "Summarizer" agent create the final blueprint.json.
-       * Benefit: Massive increase in code quality by catching edge cases before implementation begins.
-   * Real Token/Cost Counting:
-       * Current: Simulated "Fuel" increments.
-       * Update: Integrate with the Gemini/OpenAI API usage endpoints to track real cents/tokens spent per task.
-       * Benefit: Real-world "Budgeting." Set a task to stop if it costs more than $0.10.
+### Installation
 
-  3. Standardization & Connectivity
-   * Built-in MCP Server:
-       * Current: Custom internal event bus.
-       * Update: Expose the TaskEngine and ContextGateway via Model Context Protocol (MCP).
-       * Benefit: You can point other tools (like Claude Desktop or Cursor) at your cli_manager board to manage your tasks.
-   * Plugin Architecture (YAML/TOML):
-       * Current: Hardcoded Python logic for Planning/Building.
-       * Update: Define workflows in .agtx/plugins/custom.toml. Define which agent handles which phase and what artifacts it produces.
-       * Benefit: You can share your "workflows" with others without them needing to edit your Python code.
+```bash
+git clone https://github.com/yourusername/cli-manager.git
+cd cli-manager
+python -m venv .venv
+source .venv/bin/activate       # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-  4. TUI & UX Refinement
-   * Global Dashboard Mode:
-       * Current: Monitors one project at a time.
-       * Update: A "Fleet View" (cli-manager --global) that scans all folders on your machine for .agtx data.
-       * Benefit: Manage 5 different repos from a single terminal window.
-   * Interactive DAG Visualizer:
-       * Current: A static tree in the TUI.
-       * Update: Allow the user to "Select" nodes in the DAG to re-run specific failed branches or modify their descriptions mid-build.
+### Run
 
-  ---
+```bash
+.venv/bin/python src/tui/main_view.py
+```
 
-  THE "NEXT PHASE" PRIORITY LIST
-  If you are moving to Gemini now, here is the order of operations I recommend:
+### Keybindings
 
-   1. Isolation (High Priority): Implement Git Worktrees. It is the single biggest difference between a "Script" and a "System."
-   2. The Debate (Medium Priority): Leverage your superior logic by adding Adversarial Planning.
-   3. The Handover (Medium Priority): Implement Tmux so you can actually "Talk" to your agents instead of just watching them.
+| Key | Action |
+|-----|--------|
+| `n` | Create a new Planning Task |
+| `a` | Approve the selected task for execution |
+| `l` | Toggle the Log Viewer panel |
+| `q` | Quit |
 
-  Final Action: Commit your current "Phase Evolution" code to Git now. Then, in the next session, give Gemini the PROJECT_STATE.md and tell it: "We have the
-  brain; now build the body. Start with Git Worktree isolation."
+---
+
+## Roadmap
+
+### 🌿 Git Worktree Isolation
+Replace file-lock-based conflict prevention with isolated Git worktrees per task. Each agent runs in its own branch-scoped workspace — enabling **true parallel execution** without file collisions. Merge strategies handled post-critique.
+
+### 🗣️ Multi-Agent Debate Mode
+Before any build begins, two Planning Agents debate the architecture. A third **Summarizer Agent** synthesizes the debate into a final blueprint. You approve the blueprint before execution starts. Better plans, fewer Auto-Fix loops.
+
+### 🔌 Model Context Protocol (MCP) Integration
+Expose the Task Engine via MCP so external tools — Claude Desktop, Cursor, Zed — can read and write to the CLI Manager board. Build from your IDE; orchestrate from your terminal.
+
+### 💰 Real Token & Cost Tracking
+Replace simulated "Fuel" with actual API cost accounting. Set per-task and per-session budget caps. The orchestrator pauses and requests approval when a task would exceed its budget.
+
+### 🖥️ Tmux / PTY Integration
+Run agents inside pseudo-terminals for full **Human-in-the-Loop** support. If an agent gets stuck, you can type directly into its terminal session. Full interactivity without breaking the orchestration loop.
+
+---
+
+## Contributing
+
+Pull requests are welcome. For major changes, open an issue first to discuss what you'd like to change. Please ensure tests pass and the TUI remains functional after your changes.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
